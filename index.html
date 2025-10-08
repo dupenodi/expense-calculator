@@ -19,14 +19,27 @@
             <div id="balance-summary">
                 <div class="balance-item">
                     <span class="name">Sharath</span>
-                    <span id="sharath-balance" class="amount">$0.00</span>
+                    <span id="sharath-balance" class="amount">₹0.00</span>
                 </div>
                 <div class="balance-item">
                     <span class="name">Thejas</span>
-                    <span id="thejas-balance" class="amount">$0.00</span>
+                    <span id="thejas-balance" class="amount">₹0.00</span>
                 </div>
             </div>
             <div id="settlement" class="settlement"></div>
+        </div>
+
+        <!-- Quick Add Buttons -->
+        <div class="quick-add-card">
+            <h3>Quick Add</h3>
+            <div class="quick-buttons">
+                <button type="button" class="quick-btn" data-desc="Rent" data-amount="15000">🏠 Rent</button>
+                <button type="button" class="quick-btn" data-desc="Electricity" data-amount="2000">⚡ Electricity</button>
+                <button type="button" class="quick-btn" data-desc="WiFi" data-amount="800">🌐 WiFi</button>
+                <button type="button" class="quick-btn" data-desc="Water" data-amount="500">💧 Water</button>
+                <button type="button" class="quick-btn" data-desc="Cook/Maid" data-amount="3000">🍳 Cook</button>
+                <button type="button" class="quick-btn" data-desc="Groceries" data-amount="2500">🛒 Groceries</button>
+            </div>
         </div>
 
         <!-- Add Expense Form -->
@@ -40,7 +53,7 @@
                 
                 <div class="form-row">
                     <div class="form-group">
-                        <label for="amount">Amount ($)</label>
+                        <label for="amount">Amount (₹)</label>
                         <input type="number" id="amount" step="0.01" placeholder="0.00" required>
                     </div>
                     
@@ -54,8 +67,58 @@
                     </div>
                 </div>
                 
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="date-paid">Date Paid</label>
+                        <input type="date" id="date-paid" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="split-type">Split Type</label>
+                        <select id="split-type" required>
+                            <option value="equal">Equal (50/50)</option>
+                            <option value="60-40">60/40 (You pay more)</option>
+                            <option value="40-60">40/60 (They pay more)</option>
+                            <option value="70-30">70/30 (You pay more)</option>
+                            <option value="30-70">30/70 (They pay more)</option>
+                            <option value="custom">Custom Split</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div id="custom-split" class="form-row" style="display: none;">
+                    <div class="form-group">
+                        <label for="sharath-percent">Sharath's %</label>
+                        <input type="number" id="sharath-percent" min="0" max="100" placeholder="50">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="thejas-percent">Thejas's %</label>
+                        <input type="number" id="thejas-percent" min="0" max="100" placeholder="50">
+                    </div>
+                </div>
+                
                 <button type="submit" class="btn-primary">Add Expense</button>
             </form>
+        </div>
+
+        <!-- Total Summary -->
+        <div class="summary-card">
+            <h3>Monthly Summary</h3>
+            <div class="summary-stats">
+                <div class="stat-item">
+                    <span class="stat-label">Total Expenses</span>
+                    <span id="total-expenses" class="stat-value">₹0.00</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">This Month</span>
+                    <span id="month-expenses" class="stat-value">₹0.00</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Avg per Day</span>
+                    <span id="daily-avg" class="stat-value">₹0.00</span>
+                </div>
+            </div>
         </div>
 
         <!-- Expenses List -->
@@ -63,6 +126,7 @@
             <div class="expenses-header">
                 <h3>Recent Expenses</h3>
                 <div class="expenses-actions">
+                    <input type="text" id="search-expenses" placeholder="Search expenses..." class="search-input">
                     <button id="export-btn" class="btn-secondary">Export Data</button>
                     <button id="clear-btn" class="btn-danger">Clear All</button>
                 </div>
