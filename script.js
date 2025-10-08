@@ -65,8 +65,11 @@ class ExpenseCalculator {
             const response = await fetch(`${this.webAppUrl}?action=get`);
             const data = await response.json();
             
+            console.log('Data from Google Sheets:', data);
+            
             if (data.success) {
                 this.expenses = data.expenses || [];
+                console.log('Loaded expenses:', this.expenses);
                 this.saveToLocalStorage(); // Keep local backup
             }
         } catch (error) {
@@ -220,12 +223,25 @@ function doGet(e) {
       for (let i = startRow; i < data.length; i++) {
         const row = data[i];
         if (row[0]) { // If ID exists
+          // Handle date properly - convert from various formats to YYYY-MM-DD
+          let dateStr = row[4] || '';
+          if (dateStr) {
+            try {
+              const date = new Date(dateStr);
+              if (!isNaN(date.getTime())) {
+                dateStr = date.toISOString().split('T')[0]; // Convert to YYYY-MM-DD
+              }
+            } catch (e) {
+              console.log('Date parsing error:', e);
+            }
+          }
+          
           expenses.push({
-            id: row[0],
+            id: row[0].toString(),
             description: row[1] || '',
             amount: parseFloat(row[2]) || 0,
             paidBy: row[3] || '',
-            date: row[4] || '',
+            date: dateStr,
             splitType: row[5] || 'equal',
             sharathPercent: parseInt(row[6]) || 50,
             thejasPercent: parseInt(row[7]) || 50,
@@ -637,6 +653,7 @@ function doGet(e) {
 
     // Update display
     updateDisplay() {
+        console.log('Updating display with expenses:', this.expenses);
         this.updateBalanceDisplay();
         this.updateExpensesList();
         this.updateSummaryStats();
