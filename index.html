@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Expense Splitter - Sharath & Thejas</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>💰 Expense Splitter</h1>
+            <p>Split expenses between Sharath & Thejas</p>
+        </header>
+
+        <!-- Balance Summary -->
+        <div class="balance-card">
+            <h2>Current Balance</h2>
+            <div id="balance-summary">
+                <div class="balance-item">
+                    <span class="name">Sharath</span>
+                    <span id="sharath-balance" class="amount">$0.00</span>
+                </div>
+                <div class="balance-item">
+                    <span class="name">Thejas</span>
+                    <span id="thejas-balance" class="amount">$0.00</span>
+                </div>
+            </div>
+            <div id="settlement" class="settlement"></div>
+        </div>
+
+        <!-- Add Expense Form -->
+        <div class="expense-form-card">
+            <h3>Add New Expense</h3>
+            <form id="expense-form">
+                <div class="form-group">
+                    <label for="description">Description</label>
+                    <input type="text" id="description" placeholder="e.g., Groceries, Rent, Dinner" required>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="amount">Amount ($)</label>
+                        <input type="number" id="amount" step="0.01" placeholder="0.00" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="paid-by">Paid by</label>
+                        <select id="paid-by" required>
+                            <option value="">Select person</option>
+                            <option value="sharath">Sharath</option>
+                            <option value="thejas">Thejas</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn-primary">Add Expense</button>
+            </form>
+        </div>
+
+        <!-- Expenses List -->
+        <div class="expenses-card">
+            <div class="expenses-header">
+                <h3>Recent Expenses</h3>
+                <div class="expenses-actions">
+                    <button id="export-btn" class="btn-secondary">Export Data</button>
+                    <button id="clear-btn" class="btn-danger">Clear All</button>
+                </div>
+            </div>
+            <div id="expenses-list" class="expenses-list">
+                <div class="no-expenses">No expenses added yet</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
