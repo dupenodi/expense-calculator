@@ -76,15 +76,24 @@ class ExpenseCalculator {
         if (!this.webAppUrl || !this.isOnline) return false;
         
         try {
-            const response = await fetch(this.webAppUrl, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    action: 'add',
-                    expense: expense
-                })
+            // Use GET request with URL parameters to avoid CORS issues with POST
+            const params = new URLSearchParams({
+                action: 'add',
+                id: expense.id,
+                description: expense.description,
+                amount: expense.amount,
+                paidBy: expense.paidBy,
+                date: expense.date,
+                splitType: expense.splitType,
+                sharathPercent: expense.sharathPercent,
+                thejasPercent: expense.thejasPercent,
+                category: expense.category,
+                timestamp: expense.timestamp
+            });
+            
+            const response = await fetch(`${this.webAppUrl}?${params.toString()}`, {
+                method: 'GET',
+                mode: 'cors'
             });
             
             const result = await response.json();
@@ -198,6 +207,36 @@ function doGet(e) {
       }));
     }
     
+    // Handle add expense via GET request (to avoid CORS issues)
+    if (e.parameter.action === 'add') {
+      // Add header if sheet is empty
+      if (sheet.getLastRow() === 0) {
+        sheet.appendRow([
+          'ID', 'Description', 'Amount', 'Paid By', 'Date', 
+          'Split Type', 'Sharath %', 'Thejas %', 'Category', 'Timestamp'
+        ]);
+      }
+      
+      // Add expense row from URL parameters
+      sheet.appendRow([
+        e.parameter.id || '',
+        e.parameter.description || '',
+        parseFloat(e.parameter.amount) || 0,
+        e.parameter.paidBy || '',
+        e.parameter.date || '',
+        e.parameter.splitType || 'equal',
+        parseInt(e.parameter.sharathPercent) || 50,
+        parseInt(e.parameter.thejasPercent) || 50,
+        e.parameter.category || 'other',
+        e.parameter.timestamp || ''
+      ]);
+      
+      return output.setContent(JSON.stringify({
+        success: true,
+        message: 'Expense added successfully'
+      }));
+    }
+    
     // Test endpoint
     if (e.parameter.action === 'test') {
       return output.setContent(JSON.stringify({
@@ -220,67 +259,7 @@ function doGet(e) {
   }
 }
 
-function doPost(e) {
-  // Handle CORS
-  const output = ContentService.createTextOutput();
-  output.setMimeType(ContentService.MimeType.JSON);
-  
-  try {
-    // Get or create the spreadsheet
-    let sheet;
-    try {
-      sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-    } catch (error) {
-      // If no active spreadsheet, create one
-      const spreadsheet = SpreadsheetApp.create('Expense Calculator Data');
-      sheet = spreadsheet.getActiveSheet();
-      sheet.setName('Expenses');
-    }
-    const data = JSON.parse(e.postData.contents);
-    
-    if (data.action === 'add') {
-      const expense = data.expense;
-      
-      // Add header if sheet is empty
-      if (sheet.getLastRow() === 0) {
-        sheet.appendRow([
-          'ID', 'Description', 'Amount', 'Paid By', 'Date', 
-          'Split Type', 'Sharath %', 'Thejas %', 'Category', 'Timestamp'
-        ]);
-      }
-      
-      // Add expense row
-      sheet.appendRow([
-        expense.id,
-        expense.description,
-        expense.amount,
-        expense.paidBy,
-        expense.date,
-        expense.splitType,
-        expense.sharathPercent,
-        expense.thejasPercent,
-        expense.category,
-        expense.timestamp
-      ]);
-      
-      return output.setContent(JSON.stringify({
-        success: true,
-        message: 'Expense added successfully'
-      }));
-    }
-    
-    return output.setContent(JSON.stringify({
-      success: false, 
-      error: 'Invalid action'
-    }));
-    
-  } catch (error) {
-    return output.setContent(JSON.stringify({
-      success: false, 
-      error: error.toString()
-    }));
-  }
-}
+// Note: doPost function removed - using GET requests only to avoid CORS issues
         `;
         
         // Create modal to show script
