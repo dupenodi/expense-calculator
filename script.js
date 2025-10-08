@@ -148,71 +148,117 @@ class ExpenseCalculator {
         const scriptCode = `
 // Google Apps Script for Expense Calculator
 function doGet(e) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  // Handle CORS
+  const output = ContentService.createTextOutput();
+  output.setMimeType(ContentService.MimeType.JSON);
   
-  if (e.parameter.action === 'get') {
-    const data = sheet.getDataRange().getValues();
-    const expenses = [];
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
     
-    // Skip header row
-    for (let i = 1; i < data.length; i++) {
-      const row = data[i];
-      if (row[0]) { // If ID exists
-        expenses.push({
-          id: row[0],
-          description: row[1],
-          amount: parseFloat(row[2]) || 0,
-          paidBy: row[3],
-          date: row[4],
-          splitType: row[5] || 'equal',
-          sharathPercent: parseInt(row[6]) || 50,
-          thejasPercent: parseInt(row[7]) || 50,
-          category: row[8] || 'other',
-          timestamp: row[9]
-        });
+    if (e.parameter.action === 'get') {
+      const data = sheet.getDataRange().getValues();
+      const expenses = [];
+      
+      // Skip header row if it exists
+      const startRow = data.length > 0 && data[0][0] === 'ID' ? 1 : 0;
+      
+      for (let i = startRow; i < data.length; i++) {
+        const row = data[i];
+        if (row[0]) { // If ID exists
+          expenses.push({
+            id: row[0],
+            description: row[1] || '',
+            amount: parseFloat(row[2]) || 0,
+            paidBy: row[3] || '',
+            date: row[4] || '',
+            splitType: row[5] || 'equal',
+            sharathPercent: parseInt(row[6]) || 50,
+            thejasPercent: parseInt(row[7]) || 50,
+            category: row[8] || 'other',
+            timestamp: row[9] || ''
+          });
+        }
       }
+      
+      return output.setContent(JSON.stringify({
+        success: true, 
+        expenses: expenses.reverse() // Most recent first
+      }));
     }
     
-    return ContentService
-      .createTextOutput(JSON.stringify({success: true, expenses: expenses}))
-      .setMimeType(ContentService.MimeType.JSON);
+    // Test endpoint
+    if (e.parameter.action === 'test') {
+      return output.setContent(JSON.stringify({
+        success: true, 
+        message: 'Connection successful!',
+        timestamp: new Date().toISOString()
+      }));
+    }
+    
+    return output.setContent(JSON.stringify({
+      success: false, 
+      error: 'Invalid action'
+    }));
+    
+  } catch (error) {
+    return output.setContent(JSON.stringify({
+      success: false, 
+      error: error.toString()
+    }));
   }
 }
 
 function doPost(e) {
-  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-  const data = JSON.parse(e.postData.contents);
+  // Handle CORS
+  const output = ContentService.createTextOutput();
+  output.setMimeType(ContentService.MimeType.JSON);
   
-  if (data.action === 'add') {
-    const expense = data.expense;
+  try {
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    const data = JSON.parse(e.postData.contents);
     
-    // Add header if sheet is empty
-    if (sheet.getLastRow() === 0) {
-      sheet.appendRow(['ID', 'Description', 'Amount', 'Paid By', 'Date', 'Split Type', 'Sharath %', 'Thejas %', 'Category', 'Timestamp']);
+    if (data.action === 'add') {
+      const expense = data.expense;
+      
+      // Add header if sheet is empty
+      if (sheet.getLastRow() === 0) {
+        sheet.appendRow([
+          'ID', 'Description', 'Amount', 'Paid By', 'Date', 
+          'Split Type', 'Sharath %', 'Thejas %', 'Category', 'Timestamp'
+        ]);
+      }
+      
+      // Add expense row
+      sheet.appendRow([
+        expense.id,
+        expense.description,
+        expense.amount,
+        expense.paidBy,
+        expense.date,
+        expense.splitType,
+        expense.sharathPercent,
+        expense.thejasPercent,
+        expense.category,
+        expense.timestamp
+      ]);
+      
+      return output.setContent(JSON.stringify({
+        success: true,
+        message: 'Expense added successfully'
+      }));
     }
     
-    // Add expense row
-    sheet.appendRow([
-      expense.id,
-      expense.description,
-      expense.amount,
-      expense.paidBy,
-      expense.date,
-      expense.splitType,
-      expense.sharathPercent,
-      expense.thejasPercent,
-      expense.category,
-      expense.timestamp
-    ]);
+    return output.setContent(JSON.stringify({
+      success: false, 
+      error: 'Invalid action'
+    }));
     
-    return ContentService
-      .createTextOutput(JSON.stringify({success: true}))
-      .setMimeType(ContentService.MimeType.JSON);
+  } catch (error) {
+    return output.setContent(JSON.stringify({
+      success: false, 
+      error: error.toString()
+    }));
   }
-  
-  return ContentService
-    .createTextOutput(JSON.stringify({success: false}))
-    .setMimeType(ContentService.MimeType.JSON);
 }
         `;
         
@@ -282,26 +328,57 @@ function doPost(e) {
         }
         
         try {
-            // Test if web app is accessible
-            const response = await fetch(`${webAppUrl}?action=get`);
-            const data = await response.json();
+            // Test connection first
+            const testResponse = await fetch(`${webAppUrl}?action=test`, {
+                method: 'GET',
+                mode: 'cors'
+            });
             
-            if (data.success !== undefined) {
+            if (!testResponse.ok) {
+                throw new Error(`HTTP ${testResponse.status}: ${testResponse.statusText}`);
+            }
+            
+            const testData = await testResponse.json();
+            
+            if (testData.success) {
                 // Save web app URL
                 this.webAppUrl = webAppUrl;
                 localStorage.setItem('webAppUrl', webAppUrl);
                 
+                // Load existing data
                 await this.loadFromGoogleSheets();
                 this.hideSetupCard();
                 this.updateDisplay();
                 
                 this.showNotification('Successfully connected to Google Sheets!');
             } else {
-                throw new Error('Invalid response');
+                throw new Error(testData.error || 'Connection test failed');
             }
             
         } catch (error) {
-            alert('Could not connect to Google Apps Script. Please make sure:\n1. The URL is correct\n2. The script is deployed as a web app\n3. Access is set to "Anyone"\n4. You have internet connection');
+            console.error('Connection error:', error);
+            
+            let errorMessage = 'Could not connect to Google Apps Script.\n\n';
+            
+            if (error.message.includes('CORS')) {
+                errorMessage += 'CORS Error: Make sure your Google Apps Script is:\n';
+                errorMessage += '1. Deployed as a web app\n';
+                errorMessage += '2. Access set to "Anyone"\n';
+                errorMessage += '3. Using the latest deployment\n\n';
+            } else if (error.message.includes('404')) {
+                errorMessage += 'URL not found. Please check:\n';
+                errorMessage += '1. The URL is correct\n';
+                errorMessage += '2. The script is properly deployed\n\n';
+            } else {
+                errorMessage += 'Please check:\n';
+                errorMessage += '1. The URL is correct\n';
+                errorMessage += '2. The script is deployed as a web app\n';
+                errorMessage += '3. Access is set to "Anyone"\n';
+                errorMessage += '4. You have internet connection\n\n';
+            }
+            
+            errorMessage += `Error details: ${error.message}`;
+            alert(errorMessage);
         }
     }
 
