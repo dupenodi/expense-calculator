@@ -13,6 +13,30 @@
             <p>Split expenses between Sharath & Thejas</p>
         </header>
 
+        <!-- Setup Card (shown only on first use) -->
+        <div id="setup-card" class="setup-card" style="display: none;">
+            <h3>🔗 Connect to Google Sheets</h3>
+            <p>To share expenses with Thejas, we need to connect to a Google Sheet:</p>
+            <div class="setup-steps">
+                <div class="step">
+                    <strong>Step 1:</strong> <a href="#" id="create-sheet-link" target="_blank">Create a Google Sheet</a>
+                </div>
+                <div class="step">
+                    <strong>Step 2:</strong> Copy the Sheet ID from the URL
+                </div>
+                <div class="step">
+                    <strong>Step 3:</strong> Paste it below and click Connect
+                </div>
+            </div>
+            <div class="setup-form">
+                <input type="text" id="sheet-id" placeholder="Paste Google Sheet ID here..." />
+                <button id="connect-sheet" class="btn-primary">Connect Sheet</button>
+            </div>
+            <div class="setup-help">
+                <small>Sheet ID is the long string in your Google Sheets URL between /d/ and /edit</small>
+            </div>
+        </div>
+
         <!-- Balance Summary -->
         <div class="balance-card">
             <h2>Current Balance</h2>
@@ -137,6 +161,8 @@
         </div>
     </div>
 
+    <!-- Google Sheets API -->
+    <script src="https://apis.google.com/js/api.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

@@ -1,21 +1,192 @@
-// Expense Calculator App
+// Expense Calculator App with Google Sheets Integration
 class ExpenseCalculator {
     constructor() {
-        this.expenses = this.loadExpenses();
+        this.expenses = [];
         this.searchTerm = '';
+        this.sheetId = localStorage.getItem('sheetId');
+        this.isOnline = navigator.onLine;
+        
+        // Initialize Google Sheets API
+        this.initializeGoogleAPI();
+        
+        // Load data and initialize
+        this.loadData();
         this.initializeEventListeners();
         this.updateDisplay();
+        
+        // Set up online/offline detection
+        window.addEventListener('online', () => {
+            this.isOnline = true;
+            this.syncData();
+        });
+        
+        window.addEventListener('offline', () => {
+            this.isOnline = false;
+        });
     }
 
-    // Load expenses from localStorage
-    loadExpenses() {
+    // Initialize Google Sheets API
+    async initializeGoogleAPI() {
+        try {
+            await new Promise((resolve) => {
+                gapi.load('client', resolve);
+            });
+            
+            await gapi.client.init({
+                apiKey: 'AIzaSyBqJ8J8J8J8J8J8J8J8J8J8J8J8J8J8J8J', // We'll use a simpler approach
+                discoveryDocs: ['https://sheets.googleapis.com/$discovery/rest?version=v4'],
+            });
+            
+            console.log('Google Sheets API initialized');
+        } catch (error) {
+            console.log('Google API not available, using localStorage fallback');
+            this.useLocalStorage = true;
+        }
+    }
+
+    // Load data from Google Sheets or localStorage
+    async loadData() {
+        if (!this.sheetId) {
+            this.showSetupCard();
+            return;
+        }
+
+        try {
+            if (this.isOnline && !this.useLocalStorage) {
+                await this.loadFromGoogleSheets();
+            } else {
+                this.loadFromLocalStorage();
+            }
+        } catch (error) {
+            console.log('Failed to load from Google Sheets, using localStorage');
+            this.loadFromLocalStorage();
+        }
+    }
+
+    // Load expenses from localStorage (fallback)
+    loadFromLocalStorage() {
         const stored = localStorage.getItem('expenses');
-        return stored ? JSON.parse(stored) : [];
+        this.expenses = stored ? JSON.parse(stored) : [];
+    }
+
+    // Load from Google Sheets (simplified approach using CSV)
+    async loadFromGoogleSheets() {
+        if (!this.sheetId) return;
+        
+        try {
+            // Use the public CSV export URL for Google Sheets
+            const csvUrl = `https://docs.google.com/spreadsheets/d/${this.sheetId}/export?format=csv&gid=0`;
+            const response = await fetch(csvUrl);
+            const csvText = await response.text();
+            
+            this.expenses = this.parseCSVToExpenses(csvText);
+            this.saveToLocalStorage(); // Keep local backup
+        } catch (error) {
+            console.log('Error loading from Google Sheets:', error);
+            this.loadFromLocalStorage();
+        }
+    }
+
+    // Parse CSV data to expenses array
+    parseCSVToExpenses(csvText) {
+        const lines = csvText.split('\n');
+        const expenses = [];
+        
+        // Skip header row
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (!line) continue;
+            
+            const columns = this.parseCSVLine(line);
+            if (columns.length >= 8) {
+                expenses.push({
+                    id: columns[0] || Date.now().toString(),
+                    description: columns[1] || '',
+                    amount: parseFloat(columns[2]) || 0,
+                    paidBy: columns[3] || '',
+                    date: columns[4] || '',
+                    splitType: columns[5] || 'equal',
+                    sharathPercent: parseInt(columns[6]) || 50,
+                    thejasPercent: parseInt(columns[7]) || 50,
+                    category: columns[8] || 'other',
+                    timestamp: columns[9] || new Date().toISOString()
+                });
+            }
+        }
+        
+        return expenses.reverse(); // Most recent first
+    }
+
+    // Simple CSV line parser
+    parseCSVLine(line) {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+        
+        for (let i = 0; i < line.length; i++) {
+            const char = line[i];
+            
+            if (char === '"') {
+                inQuotes = !inQuotes;
+            } else if (char === ',' && !inQuotes) {
+                result.push(current.trim());
+                current = '';
+            } else {
+                current += char;
+            }
+        }
+        
+        result.push(current.trim());
+        return result;
     }
 
     // Save expenses to localStorage
-    saveExpenses() {
+    saveToLocalStorage() {
         localStorage.setItem('expenses', JSON.stringify(this.expenses));
+    }
+
+    // Save to Google Sheets (we'll provide instructions for manual setup)
+    async saveToGoogleSheets() {
+        // For now, we'll show instructions to manually update the sheet
+        // In a production app, you'd use the Sheets API with proper authentication
+        this.showSyncInstructions();
+    }
+
+    // Show setup card for first-time users
+    showSetupCard() {
+        const setupCard = document.getElementById('setup-card');
+        const mainContent = document.querySelectorAll('.balance-card, .quick-add-card, .expense-form-card, .summary-card, .expenses-card');
+        
+        setupCard.style.display = 'block';
+        mainContent.forEach(card => card.style.display = 'none');
+        
+        // Set up the create sheet link
+        const createSheetLink = document.getElementById('create-sheet-link');
+        createSheetLink.href = this.getGoogleSheetTemplate();
+    }
+
+    // Hide setup card and show main content
+    hideSetupCard() {
+        const setupCard = document.getElementById('setup-card');
+        const mainContent = document.querySelectorAll('.balance-card, .quick-add-card, .expense-form-card, .summary-card, .expenses-card');
+        
+        setupCard.style.display = 'none';
+        mainContent.forEach(card => card.style.display = 'block');
+    }
+
+    // Get Google Sheet template URL
+    getGoogleSheetTemplate() {
+        const templateData = [
+            ['ID', 'Description', 'Amount', 'Paid By', 'Date', 'Split Type', 'Sharath %', 'Thejas %', 'Category', 'Timestamp'],
+            ['1', 'Sample Expense', '100', 'sharath', '2025-10-08', 'equal', '50', '50', 'other', new Date().toISOString()]
+        ];
+        
+        const csvContent = templateData.map(row => 
+            row.map(cell => `"${cell}"`).join(',')
+        ).join('\n');
+        
+        const encodedContent = encodeURIComponent(csvContent);
+        return `https://docs.google.com/spreadsheets/create?usp=sharing&headers=true&content=${encodedContent}`;
     }
 
     // Initialize event listeners
@@ -27,15 +198,18 @@ class ExpenseCalculator {
         const searchInput = document.getElementById('search-expenses');
         const quickButtons = document.querySelectorAll('.quick-btn');
         const datePaid = document.getElementById('date-paid');
+        const connectSheetBtn = document.getElementById('connect-sheet');
 
         // Set today's date as default
-        datePaid.valueAsDate = new Date();
+        if (datePaid) datePaid.valueAsDate = new Date();
 
-        form.addEventListener('submit', (e) => this.handleAddExpense(e));
-        exportBtn.addEventListener('click', () => this.exportData());
-        clearBtn.addEventListener('click', () => this.clearAllExpenses());
-        splitTypeSelect.addEventListener('change', (e) => this.handleSplitTypeChange(e));
-        searchInput.addEventListener('input', (e) => this.handleSearch(e));
+        // Main app event listeners
+        if (form) form.addEventListener('submit', (e) => this.handleAddExpense(e));
+        if (exportBtn) exportBtn.addEventListener('click', () => this.exportData());
+        if (clearBtn) clearBtn.addEventListener('click', () => this.clearAllExpenses());
+        if (splitTypeSelect) splitTypeSelect.addEventListener('change', (e) => this.handleSplitTypeChange(e));
+        if (searchInput) searchInput.addEventListener('input', (e) => this.handleSearch(e));
+        if (connectSheetBtn) connectSheetBtn.addEventListener('click', () => this.connectToSheet());
         
         // Quick add buttons
         quickButtons.forEach(btn => {
@@ -46,13 +220,66 @@ class ExpenseCalculator {
         const sharathPercent = document.getElementById('sharath-percent');
         const thejasPercent = document.getElementById('thejas-percent');
         
-        sharathPercent.addEventListener('input', () => {
-            thejasPercent.value = 100 - parseInt(sharathPercent.value || 0);
-        });
+        if (sharathPercent && thejasPercent) {
+            sharathPercent.addEventListener('input', () => {
+                thejasPercent.value = 100 - parseInt(sharathPercent.value || 0);
+            });
+            
+            thejasPercent.addEventListener('input', () => {
+                sharathPercent.value = 100 - parseInt(thejasPercent.value || 0);
+            });
+        }
+    }
+
+    // Connect to Google Sheet
+    async connectToSheet() {
+        const sheetIdInput = document.getElementById('sheet-id');
+        const sheetId = sheetIdInput.value.trim();
         
-        thejasPercent.addEventListener('input', () => {
-            sharathPercent.value = 100 - parseInt(thejasPercent.value || 0);
-        });
+        if (!sheetId) {
+            alert('Please enter a Google Sheet ID');
+            return;
+        }
+        
+        // Extract sheet ID from URL if full URL was pasted
+        const sheetIdMatch = sheetId.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+        const cleanSheetId = sheetIdMatch ? sheetIdMatch[1] : sheetId;
+        
+        try {
+            // Test if sheet is accessible
+            const testUrl = `https://docs.google.com/spreadsheets/d/${cleanSheetId}/export?format=csv&gid=0`;
+            const response = await fetch(testUrl);
+            
+            if (!response.ok) {
+                throw new Error('Sheet not accessible');
+            }
+            
+            // Save sheet ID and load data
+            this.sheetId = cleanSheetId;
+            localStorage.setItem('sheetId', cleanSheetId);
+            
+            await this.loadFromGoogleSheets();
+            this.hideSetupCard();
+            this.updateDisplay();
+            
+            this.showNotification('Successfully connected to Google Sheet!');
+            
+        } catch (error) {
+            alert('Could not connect to Google Sheet. Please make sure:\n1. The sheet is publicly viewable\n2. The ID is correct\n3. You have internet connection');
+        }
+    }
+
+    // Sync data (reload from Google Sheets)
+    async syncData() {
+        if (this.sheetId && this.isOnline) {
+            try {
+                await this.loadFromGoogleSheets();
+                this.updateDisplay();
+                this.showNotification('Data synced!');
+            } catch (error) {
+                console.log('Sync failed:', error);
+            }
+        }
     }
 
     // Handle adding new expense
@@ -122,8 +349,13 @@ class ExpenseCalculator {
         };
 
         this.expenses.unshift(expense); // Add to beginning of array
-        this.saveExpenses();
+        this.saveToLocalStorage();
         this.updateDisplay();
+        
+        // Show instructions to update Google Sheet
+        if (this.sheetId) {
+            this.showAddToSheetInstructions(expense);
+        }
         
         // Reset form
         e.target.reset();
@@ -132,7 +364,27 @@ class ExpenseCalculator {
         this.handleSplitTypeChange({ target: { value: 'equal' } });
         
         // Show success feedback
-        this.showNotification('Expense added successfully!');
+        this.showNotification('Expense added! Remember to update the Google Sheet.');
+    }
+
+    // Show instructions to add expense to Google Sheet
+    showAddToSheetInstructions(expense) {
+        const instructions = `
+To sync with Thejas, add this row to your Google Sheet:
+
+${expense.id},"${expense.description}",${expense.amount},"${expense.paidBy}","${expense.date}","${expense.splitType}",${expense.sharathPercent},${expense.thejasPercent},"${expense.category}","${expense.timestamp}"
+
+Sheet URL: https://docs.google.com/spreadsheets/d/${this.sheetId}/edit
+        `;
+        
+        // Copy to clipboard if possible
+        if (navigator.clipboard) {
+            const csvRow = `${expense.id},"${expense.description}",${expense.amount},"${expense.paidBy}","${expense.date}","${expense.splitType}",${expense.sharathPercent},${expense.thejasPercent},"${expense.category}","${expense.timestamp}"`;
+            navigator.clipboard.writeText(csvRow);
+            this.showNotification('Row data copied to clipboard! Paste it in your Google Sheet.');
+        } else {
+            alert(instructions);
+        }
     }
 
     // Calculate balances
@@ -193,6 +445,8 @@ class ExpenseCalculator {
         const thejasBalanceEl = document.getElementById('thejas-balance');
         const settlementEl = document.getElementById('settlement');
 
+        if (!sharathBalanceEl || !thejasBalanceEl || !settlementEl) return;
+
         // Update balance amounts
         sharathBalanceEl.textContent = `₹${Math.abs(balances.sharath).toFixed(2)}`;
         thejasBalanceEl.textContent = `₹${Math.abs(balances.thejas).toFixed(2)}`;
@@ -229,6 +483,8 @@ class ExpenseCalculator {
     // Update expenses list
     updateExpensesList() {
         const expensesList = document.getElementById('expenses-list');
+        if (!expensesList) return;
+        
         const filteredExpenses = this.getFilteredExpenses();
         
         if (this.expenses.length === 0) {
@@ -309,9 +565,9 @@ class ExpenseCalculator {
         expense.paidBy = newPaidBy;
         expense.category = this.getCategoryFromDescription(newDescription);
 
-        this.saveExpenses();
+        this.saveToLocalStorage();
         this.updateDisplay();
-        this.showNotification('Expense updated successfully!');
+        this.showNotification('Expense updated! Remember to update the Google Sheet.');
     }
 
     // Delete expense
@@ -319,9 +575,9 @@ class ExpenseCalculator {
         if (!confirm('Are you sure you want to delete this expense?')) return;
 
         this.expenses = this.expenses.filter(expense => expense.id !== id);
-        this.saveExpenses();
+        this.saveToLocalStorage();
         this.updateDisplay();
-        this.showNotification('Expense deleted successfully!');
+        this.showNotification('Expense deleted! Remember to update the Google Sheet.');
     }
 
     // Export data
@@ -348,7 +604,7 @@ class ExpenseCalculator {
         if (!confirm('Are you sure you want to clear all expenses? This cannot be undone.')) return;
 
         this.expenses = [];
-        this.saveExpenses();
+        this.saveToLocalStorage();
         this.updateDisplay();
         this.showNotification('All expenses cleared!');
     }
@@ -356,6 +612,8 @@ class ExpenseCalculator {
     // Handle split type change
     handleSplitTypeChange(e) {
         const customSplitDiv = document.getElementById('custom-split');
+        if (!customSplitDiv) return;
+        
         if (e.target.value === 'custom') {
             customSplitDiv.style.display = 'grid';
             customSplitDiv.classList.add('show');
@@ -447,9 +705,13 @@ class ExpenseCalculator {
         const daysInMonth = new Date().getDate();
         const dailyAvg = monthTotal / daysInMonth;
         
-        document.getElementById('total-expenses').textContent = `₹${balances.totalExpenses.toFixed(2)}`;
-        document.getElementById('month-expenses').textContent = `₹${monthTotal.toFixed(2)}`;
-        document.getElementById('daily-avg').textContent = `₹${dailyAvg.toFixed(2)}`;
+        const totalEl = document.getElementById('total-expenses');
+        const monthEl = document.getElementById('month-expenses');
+        const dailyEl = document.getElementById('daily-avg');
+        
+        if (totalEl) totalEl.textContent = `₹${balances.totalExpenses.toFixed(2)}`;
+        if (monthEl) monthEl.textContent = `₹${monthTotal.toFixed(2)}`;
+        if (dailyEl) dailyEl.textContent = `₹${dailyAvg.toFixed(2)}`;
     }
 
     // Show notification
@@ -469,17 +731,20 @@ class ExpenseCalculator {
             z-index: 1000;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
             animation: slideIn 0.3s ease-out;
+            max-width: 300px;
         `;
 
         document.body.appendChild(notification);
 
-        // Remove after 3 seconds
+        // Remove after 5 seconds (longer for instructions)
         setTimeout(() => {
             notification.style.animation = 'slideOut 0.3s ease-out';
             setTimeout(() => {
-                document.body.removeChild(notification);
+                if (document.body.contains(notification)) {
+                    document.body.removeChild(notification);
+                }
             }, 300);
-        }, 3000);
+        }, 5000);
     }
 }
 
