@@ -5,12 +5,21 @@ class ExpenseCalculator {
         this.searchTerm = '';
         this.sheetId = localStorage.getItem('sheetId');
         this.webAppUrl = localStorage.getItem('webAppUrl');
+        this.spreadsheetUrl = localStorage.getItem('spreadsheetUrl');
         this.isOnline = navigator.onLine;
         
         // Load data and initialize
         this.loadData();
         this.initializeEventListeners();
         this.updateDisplay();
+        
+        // Show Google Sheet button if URL is available
+        if (this.spreadsheetUrl) {
+            const showSheetBtn = document.getElementById('show-sheet-btn');
+            if (showSheetBtn) {
+                showSheetBtn.style.display = 'inline-block';
+            }
+        }
         
         // Set up online/offline detection
         window.addEventListener('online', () => {
@@ -164,16 +173,41 @@ function doGet(e) {
   const output = ContentService.createTextOutput();
   output.setMimeType(ContentService.MimeType.JSON);
   
-  try {
-    // Get or create the spreadsheet
-    let sheet;
     try {
-      sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-    } catch (error) {
-      // If no active spreadsheet, create one
-      const spreadsheet = SpreadsheetApp.create('Expense Calculator Data');
+    // Get the spreadsheet - either bound spreadsheet or create/find by name
+    let sheet;
+    let spreadsheet;
+    
+    try {
+      // First try to get the bound spreadsheet (if script is created from Google Sheets)
+      spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
       sheet = spreadsheet.getActiveSheet();
-      sheet.setName('Expenses');
+    } catch (error) {
+      // If no bound spreadsheet, look for existing one by name
+      const files = DriveApp.getFilesByName('Expense Calculator Data');
+      if (files.hasNext()) {
+        const file = files.next();
+        spreadsheet = SpreadsheetApp.openById(file.getId());
+        sheet = spreadsheet.getActiveSheet();
+      } else {
+        // Create new spreadsheet and log its URL
+        spreadsheet = SpreadsheetApp.create('Expense Calculator Data');
+        sheet = spreadsheet.getActiveSheet();
+        sheet.setName('Expenses');
+        
+        // Log the spreadsheet URL so user can find it
+        console.log('Created new spreadsheet: ' + spreadsheet.getUrl());
+        
+        // Also return the URL in the response for first-time setup
+        if (e.parameter.action === 'test') {
+          return output.setContent(JSON.stringify({
+            success: true, 
+            message: 'Connection successful!',
+            spreadsheetUrl: spreadsheet.getUrl(),
+            timestamp: new Date().toISOString()
+          }));
+        }
+      }
     }
     
     if (e.parameter.action === 'get') {
@@ -354,12 +388,33 @@ function doGet(e) {
                 this.webAppUrl = webAppUrl;
                 localStorage.setItem('webAppUrl', webAppUrl);
                 
+                // Save spreadsheet URL if provided
+                if (testData.spreadsheetUrl) {
+                    this.spreadsheetUrl = testData.spreadsheetUrl;
+                    localStorage.setItem('spreadsheetUrl', testData.spreadsheetUrl);
+                    
+                    // Show the "View Google Sheet" button
+                    const showSheetBtn = document.getElementById('show-sheet-btn');
+                    if (showSheetBtn) {
+                        showSheetBtn.style.display = 'inline-block';
+                    }
+                }
+                
                 // Load existing data
                 await this.loadFromGoogleSheets();
                 this.hideSetupCard();
                 this.updateDisplay();
                 
-                this.showNotification('Successfully connected to Google Sheets!');
+                let message = 'Successfully connected to Google Sheets!';
+                if (testData.spreadsheetUrl) {
+                    message += `\n\nYour spreadsheet: ${testData.spreadsheetUrl}`;
+                    // Also show in a more prominent way
+                    setTimeout(() => {
+                        alert(`✅ Connected successfully!\n\n📊 Your Google Sheet:\n${testData.spreadsheetUrl}\n\n💡 Bookmark this URL to access your data anytime!`);
+                    }, 1000);
+                }
+                
+                this.showNotification(message);
             } else {
                 throw new Error(testData.error || 'Connection test failed');
             }
@@ -409,6 +464,7 @@ function doGet(e) {
         const form = document.getElementById('expense-form');
         const exportBtn = document.getElementById('export-btn');
         const clearBtn = document.getElementById('clear-btn');
+        const showSheetBtn = document.getElementById('show-sheet-btn');
         const splitTypeSelect = document.getElementById('split-type');
         const searchInput = document.getElementById('search-expenses');
         const quickButtons = document.querySelectorAll('.quick-btn');
@@ -421,6 +477,7 @@ function doGet(e) {
         if (form) form.addEventListener('submit', (e) => this.handleAddExpense(e));
         if (exportBtn) exportBtn.addEventListener('click', () => this.exportData());
         if (clearBtn) clearBtn.addEventListener('click', () => this.clearAllExpenses());
+        if (showSheetBtn) showSheetBtn.addEventListener('click', () => this.showGoogleSheet());
         if (splitTypeSelect) splitTypeSelect.addEventListener('change', (e) => this.handleSplitTypeChange(e));
         if (searchInput) searchInput.addEventListener('input', (e) => this.handleSearch(e));
         
@@ -860,6 +917,15 @@ function doGet(e) {
         if (totalEl) totalEl.textContent = `₹${balances.totalExpenses.toFixed(2)}`;
         if (monthEl) monthEl.textContent = `₹${monthTotal.toFixed(2)}`;
         if (dailyEl) dailyEl.textContent = `₹${dailyAvg.toFixed(2)}`;
+    }
+
+    // Show Google Sheet
+    showGoogleSheet() {
+        if (this.spreadsheetUrl) {
+            window.open(this.spreadsheetUrl, '_blank');
+        } else {
+            alert('Google Sheet URL not available. Please reconnect to Google Sheets.');
+        }
     }
 
     // Show notification
