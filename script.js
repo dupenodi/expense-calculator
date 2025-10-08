@@ -147,13 +147,25 @@ class ExpenseCalculator {
     showScriptCode() {
         const scriptCode = `
 // Google Apps Script for Expense Calculator
+// IMPORTANT: This script must be bound to a Google Spreadsheet!
+// Go to sheets.google.com, create a new sheet, then Extensions > Apps Script
+
 function doGet(e) {
   // Handle CORS
   const output = ContentService.createTextOutput();
   output.setMimeType(ContentService.MimeType.JSON);
   
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    // Get or create the spreadsheet
+    let sheet;
+    try {
+      sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    } catch (error) {
+      // If no active spreadsheet, create one
+      const spreadsheet = SpreadsheetApp.create('Expense Calculator Data');
+      sheet = spreadsheet.getActiveSheet();
+      sheet.setName('Expenses');
+    }
     
     if (e.parameter.action === 'get') {
       const data = sheet.getDataRange().getValues();
@@ -214,7 +226,16 @@ function doPost(e) {
   output.setMimeType(ContentService.MimeType.JSON);
   
   try {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    // Get or create the spreadsheet
+    let sheet;
+    try {
+      sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    } catch (error) {
+      // If no active spreadsheet, create one
+      const spreadsheet = SpreadsheetApp.create('Expense Calculator Data');
+      sheet = spreadsheet.getActiveSheet();
+      sheet.setName('Expenses');
+    }
     const data = JSON.parse(e.postData.contents);
     
     if (data.action === 'add') {
@@ -288,13 +309,22 @@ function doPost(e) {
                     <button onclick="document.body.removeChild(this.closest('div').parentElement)" style="padding: 8px 16px; background: #6b7280; color: white; border: none; border-radius: 6px; cursor: pointer;">Close</button>
                 </div>
                 <div style="margin-top: 16px; padding: 12px; background: #f3f4f6; border-radius: 6px; font-size: 14px;">
-                    <strong>Instructions:</strong><br>
+                    <strong>IMPORTANT - Follow these steps exactly:</strong><br><br>
+                    <strong>Method 1 (Recommended):</strong><br>
+                    1. Go to <a href="https://sheets.google.com" target="_blank">sheets.google.com</a><br>
+                    2. Create a new blank spreadsheet<br>
+                    3. Go to "Extensions" → "Apps Script"<br>
+                    4. Replace the default code with the code above<br>
+                    5. Click "Deploy" → "New deployment"<br>
+                    6. Choose "Web app" type<br>
+                    7. Set "Execute as" to "Me" and "Who has access" to "Anyone"<br>
+                    8. Click "Deploy" and copy the web app URL<br><br>
+                    
+                    <strong>Method 2 (Alternative):</strong><br>
                     1. Go to <a href="https://script.google.com/create" target="_blank">script.google.com/create</a><br>
                     2. Replace the default code with the code above<br>
-                    3. Click "Deploy" → "New deployment"<br>
-                    4. Choose "Web app" type<br>
-                    5. Set "Execute as" to "Me" and "Who has access" to "Anyone"<br>
-                    6. Click "Deploy" and copy the web app URL
+                    3. The script will auto-create a spreadsheet when first used<br>
+                    4. Deploy as web app (steps 5-8 above)
                 </div>
             </div>
         `;
