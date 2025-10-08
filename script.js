@@ -9,9 +9,10 @@ class ExpenseCalculator {
         this.isOnline = navigator.onLine;
         
         // Load data and initialize
-        this.loadData();
         this.initializeEventListeners();
-        this.updateDisplay();
+        this.loadData().then(() => {
+            this.updateDisplay();
+        });
         
         // Show Google Sheet button if URL is available
         if (this.spreadsheetUrl) {
@@ -43,6 +44,7 @@ class ExpenseCalculator {
     // Load data from Google Sheets or localStorage
     async loadData() {
         if (!this.webAppUrl) {
+            this.loadFromLocalStorage(); // Load local data first
             this.showSetupCard();
             return;
         }
@@ -92,6 +94,9 @@ class ExpenseCalculator {
                 this.expenses = data.expenses || [];
                 console.log('Loaded expenses:', this.expenses);
                 this.saveToLocalStorage(); // Keep local backup
+                
+                // Update display immediately after loading
+                this.updateDisplay();
             } else {
                 throw new Error(data.error || 'Failed to load data');
             }
@@ -719,6 +724,7 @@ function doGet(e) {
     // Update display
     updateDisplay() {
         console.log('Updating display with expenses:', this.expenses);
+        console.log('Number of expenses:', this.expenses.length);
         this.updateBalanceDisplay();
         this.updateExpensesList();
         this.updateSummaryStats();
@@ -770,16 +776,23 @@ function doGet(e) {
     // Update expenses list
     updateExpensesList() {
         const expensesList = document.getElementById('expenses-list');
-        if (!expensesList) return;
+        if (!expensesList) {
+            console.log('expenses-list element not found');
+            return;
+        }
         
         const filteredExpenses = this.getFilteredExpenses();
+        console.log('Filtered expenses:', filteredExpenses);
+        console.log('Search term:', this.searchTerm);
         
         if (this.expenses.length === 0) {
+            console.log('No expenses, showing empty message');
             expensesList.innerHTML = '<div class="no-expenses">No expenses added yet</div>';
             return;
         }
         
         if (filteredExpenses.length === 0 && this.searchTerm) {
+            console.log('No expenses match search');
             expensesList.innerHTML = '<div class="no-expenses">No expenses match your search</div>';
             return;
         }
