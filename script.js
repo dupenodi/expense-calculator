@@ -4,10 +4,8 @@ class ExpenseCalculator {
         this.expenses = [];
         this.searchTerm = '';
         this.sheetId = localStorage.getItem('sheetId');
+        this.webAppUrl = localStorage.getItem('webAppUrl');
         this.isOnline = navigator.onLine;
-        
-        // Initialize Google Sheets API
-        this.initializeGoogleAPI();
         
         // Load data and initialize
         this.loadData();
@@ -25,34 +23,15 @@ class ExpenseCalculator {
         });
     }
 
-    // Initialize Google Sheets API
-    async initializeGoogleAPI() {
-        try {
-            await new Promise((resolve) => {
-                gapi.load('client', resolve);
-            });
-            
-            await gapi.client.init({
-                apiKey: 'AIzaSyBqJ8J8J8J8J8J8J8J8J8J8J8J8J8J8J8J', // We'll use a simpler approach
-                discoveryDocs: ['https://sheets.googleapis.com/$discovery/rest?version=v4'],
-            });
-            
-            console.log('Google Sheets API initialized');
-        } catch (error) {
-            console.log('Google API not available, using localStorage fallback');
-            this.useLocalStorage = true;
-        }
-    }
-
     // Load data from Google Sheets or localStorage
     async loadData() {
-        if (!this.sheetId) {
+        if (!this.webAppUrl) {
             this.showSetupCard();
             return;
         }
 
         try {
-            if (this.isOnline && !this.useLocalStorage) {
+            if (this.isOnline) {
                 await this.loadFromGoogleSheets();
             } else {
                 this.loadFromLocalStorage();
@@ -69,75 +48,22 @@ class ExpenseCalculator {
         this.expenses = stored ? JSON.parse(stored) : [];
     }
 
-    // Load from Google Sheets (simplified approach using CSV)
+    // Load from Google Sheets via Web App
     async loadFromGoogleSheets() {
-        if (!this.sheetId) return;
+        if (!this.webAppUrl) return;
         
         try {
-            // Use the public CSV export URL for Google Sheets
-            const csvUrl = `https://docs.google.com/spreadsheets/d/${this.sheetId}/export?format=csv&gid=0`;
-            const response = await fetch(csvUrl);
-            const csvText = await response.text();
+            const response = await fetch(`${this.webAppUrl}?action=get`);
+            const data = await response.json();
             
-            this.expenses = this.parseCSVToExpenses(csvText);
-            this.saveToLocalStorage(); // Keep local backup
+            if (data.success) {
+                this.expenses = data.expenses || [];
+                this.saveToLocalStorage(); // Keep local backup
+            }
         } catch (error) {
             console.log('Error loading from Google Sheets:', error);
             this.loadFromLocalStorage();
         }
-    }
-
-    // Parse CSV data to expenses array
-    parseCSVToExpenses(csvText) {
-        const lines = csvText.split('\n');
-        const expenses = [];
-        
-        // Skip header row
-        for (let i = 1; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (!line) continue;
-            
-            const columns = this.parseCSVLine(line);
-            if (columns.length >= 8) {
-                expenses.push({
-                    id: columns[0] || Date.now().toString(),
-                    description: columns[1] || '',
-                    amount: parseFloat(columns[2]) || 0,
-                    paidBy: columns[3] || '',
-                    date: columns[4] || '',
-                    splitType: columns[5] || 'equal',
-                    sharathPercent: parseInt(columns[6]) || 50,
-                    thejasPercent: parseInt(columns[7]) || 50,
-                    category: columns[8] || 'other',
-                    timestamp: columns[9] || new Date().toISOString()
-                });
-            }
-        }
-        
-        return expenses.reverse(); // Most recent first
-    }
-
-    // Simple CSV line parser
-    parseCSVLine(line) {
-        const result = [];
-        let current = '';
-        let inQuotes = false;
-        
-        for (let i = 0; i < line.length; i++) {
-            const char = line[i];
-            
-            if (char === '"') {
-                inQuotes = !inQuotes;
-            } else if (char === ',' && !inQuotes) {
-                result.push(current.trim());
-                current = '';
-            } else {
-                current += char;
-            }
-        }
-        
-        result.push(current.trim());
-        return result;
     }
 
     // Save expenses to localStorage
@@ -145,11 +71,28 @@ class ExpenseCalculator {
         localStorage.setItem('expenses', JSON.stringify(this.expenses));
     }
 
-    // Save to Google Sheets (we'll provide instructions for manual setup)
-    async saveToGoogleSheets() {
-        // For now, we'll show instructions to manually update the sheet
-        // In a production app, you'd use the Sheets API with proper authentication
-        this.showSyncInstructions();
+    // Save to Google Sheets via Web App
+    async saveToGoogleSheets(expense) {
+        if (!this.webAppUrl || !this.isOnline) return false;
+        
+        try {
+            const response = await fetch(this.webAppUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    action: 'add',
+                    expense: expense
+                })
+            });
+            
+            const result = await response.json();
+            return result.success;
+        } catch (error) {
+            console.log('Error saving to Google Sheets:', error);
+            return false;
+        }
     }
 
     // Show setup card for first-time users
@@ -160,9 +103,163 @@ class ExpenseCalculator {
         setupCard.style.display = 'block';
         mainContent.forEach(card => card.style.display = 'none');
         
-        // Set up the create sheet link
-        const createSheetLink = document.getElementById('create-sheet-link');
-        createSheetLink.href = this.getGoogleSheetTemplate();
+        // Update setup instructions
+        this.updateSetupInstructions();
+    }
+
+    // Update setup instructions
+    updateSetupInstructions() {
+        const setupCard = document.getElementById('setup-card');
+        setupCard.innerHTML = `
+            <h3>🔗 Connect to Google Sheets</h3>
+            <p>To share expenses with Thejas, we need to set up a Google Apps Script:</p>
+            <div class="setup-steps">
+                <div class="step">
+                    <strong>Step 1:</strong> <a href="https://script.google.com/create" target="_blank">Create a Google Apps Script</a>
+                </div>
+                <div class="step">
+                    <strong>Step 2:</strong> Copy and paste the provided script code
+                </div>
+                <div class="step">
+                    <strong>Step 3:</strong> Deploy as web app and get the URL
+                </div>
+                <div class="step">
+                    <strong>Step 4:</strong> Paste the web app URL below
+                </div>
+            </div>
+            <div class="setup-form">
+                <input type="text" id="webapp-url" placeholder="Paste Google Apps Script Web App URL here..." />
+                <button id="connect-webapp" class="btn-primary">Connect</button>
+            </div>
+            <div class="setup-help">
+                <button id="show-script" class="btn-secondary">Show Script Code</button>
+                <button id="skip-setup" class="btn-secondary">Skip - Use Local Only</button>
+            </div>
+        `;
+        
+        // Add event listeners for new buttons
+        document.getElementById('connect-webapp').addEventListener('click', () => this.connectToWebApp());
+        document.getElementById('show-script').addEventListener('click', () => this.showScriptCode());
+        document.getElementById('skip-setup').addEventListener('click', () => this.skipSetup());
+    }
+
+    // Show Google Apps Script code
+    showScriptCode() {
+        const scriptCode = `
+// Google Apps Script for Expense Calculator
+function doGet(e) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  
+  if (e.parameter.action === 'get') {
+    const data = sheet.getDataRange().getValues();
+    const expenses = [];
+    
+    // Skip header row
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      if (row[0]) { // If ID exists
+        expenses.push({
+          id: row[0],
+          description: row[1],
+          amount: parseFloat(row[2]) || 0,
+          paidBy: row[3],
+          date: row[4],
+          splitType: row[5] || 'equal',
+          sharathPercent: parseInt(row[6]) || 50,
+          thejasPercent: parseInt(row[7]) || 50,
+          category: row[8] || 'other',
+          timestamp: row[9]
+        });
+      }
+    }
+    
+    return ContentService
+      .createTextOutput(JSON.stringify({success: true, expenses: expenses}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function doPost(e) {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  const data = JSON.parse(e.postData.contents);
+  
+  if (data.action === 'add') {
+    const expense = data.expense;
+    
+    // Add header if sheet is empty
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow(['ID', 'Description', 'Amount', 'Paid By', 'Date', 'Split Type', 'Sharath %', 'Thejas %', 'Category', 'Timestamp']);
+    }
+    
+    // Add expense row
+    sheet.appendRow([
+      expense.id,
+      expense.description,
+      expense.amount,
+      expense.paidBy,
+      expense.date,
+      expense.splitType,
+      expense.sharathPercent,
+      expense.thejasPercent,
+      expense.category,
+      expense.timestamp
+    ]);
+    
+    return ContentService
+      .createTextOutput(JSON.stringify({success: true}))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  
+  return ContentService
+    .createTextOutput(JSON.stringify({success: false}))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+        `;
+        
+        // Create modal to show script
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        `;
+        
+        modal.innerHTML = `
+            <div style="background: white; padding: 30px; border-radius: 12px; max-width: 800px; max-height: 80vh; overflow-y: auto;">
+                <h3>Google Apps Script Code</h3>
+                <p style="margin: 16px 0; color: #666;">Copy this code and paste it into your Google Apps Script:</p>
+                <textarea readonly style="width: 100%; height: 400px; font-family: monospace; font-size: 12px; border: 1px solid #ddd; padding: 12px; border-radius: 4px;">${scriptCode}</textarea>
+                <div style="margin-top: 20px; text-align: center;">
+                    <button onclick="navigator.clipboard.writeText(\`${scriptCode.replace(/`/g, '\\`')}\`); alert('Code copied to clipboard!')" style="margin-right: 12px; padding: 8px 16px; background: #10b981; color: white; border: none; border-radius: 6px; cursor: pointer;">Copy Code</button>
+                    <button onclick="document.body.removeChild(this.closest('div').parentElement)" style="padding: 8px 16px; background: #6b7280; color: white; border: none; border-radius: 6px; cursor: pointer;">Close</button>
+                </div>
+                <div style="margin-top: 16px; padding: 12px; background: #f3f4f6; border-radius: 6px; font-size: 14px;">
+                    <strong>Instructions:</strong><br>
+                    1. Go to <a href="https://script.google.com/create" target="_blank">script.google.com/create</a><br>
+                    2. Replace the default code with the code above<br>
+                    3. Click "Deploy" → "New deployment"<br>
+                    4. Choose "Web app" type<br>
+                    5. Set "Execute as" to "Me" and "Who has access" to "Anyone"<br>
+                    6. Click "Deploy" and copy the web app URL
+                </div>
+            </div>
+        `;
+        
+        document.body.appendChild(modal);
+    }
+
+    // Skip setup and use local storage only
+    skipSetup() {
+        this.hideSetupCard();
+        this.showNotification('Using local storage only. Export data to share with Thejas.');
     }
 
     // Hide setup card and show main content
@@ -174,19 +271,51 @@ class ExpenseCalculator {
         mainContent.forEach(card => card.style.display = 'block');
     }
 
-    // Get Google Sheet template URL
-    getGoogleSheetTemplate() {
-        const templateData = [
-            ['ID', 'Description', 'Amount', 'Paid By', 'Date', 'Split Type', 'Sharath %', 'Thejas %', 'Category', 'Timestamp'],
-            ['1', 'Sample Expense', '100', 'sharath', '2025-10-08', 'equal', '50', '50', 'other', new Date().toISOString()]
-        ];
+    // Connect to Google Apps Script Web App
+    async connectToWebApp() {
+        const webAppUrlInput = document.getElementById('webapp-url');
+        const webAppUrl = webAppUrlInput.value.trim();
         
-        const csvContent = templateData.map(row => 
-            row.map(cell => `"${cell}"`).join(',')
-        ).join('\n');
+        if (!webAppUrl) {
+            alert('Please enter a Google Apps Script Web App URL');
+            return;
+        }
         
-        const encodedContent = encodeURIComponent(csvContent);
-        return `https://docs.google.com/spreadsheets/create?usp=sharing&headers=true&content=${encodedContent}`;
+        try {
+            // Test if web app is accessible
+            const response = await fetch(`${webAppUrl}?action=get`);
+            const data = await response.json();
+            
+            if (data.success !== undefined) {
+                // Save web app URL
+                this.webAppUrl = webAppUrl;
+                localStorage.setItem('webAppUrl', webAppUrl);
+                
+                await this.loadFromGoogleSheets();
+                this.hideSetupCard();
+                this.updateDisplay();
+                
+                this.showNotification('Successfully connected to Google Sheets!');
+            } else {
+                throw new Error('Invalid response');
+            }
+            
+        } catch (error) {
+            alert('Could not connect to Google Apps Script. Please make sure:\n1. The URL is correct\n2. The script is deployed as a web app\n3. Access is set to "Anyone"\n4. You have internet connection');
+        }
+    }
+
+    // Sync data (reload from Google Sheets)
+    async syncData() {
+        if (this.webAppUrl && this.isOnline) {
+            try {
+                await this.loadFromGoogleSheets();
+                this.updateDisplay();
+                this.showNotification('Data synced!');
+            } catch (error) {
+                console.log('Sync failed:', error);
+            }
+        }
     }
 
     // Initialize event listeners
@@ -198,7 +327,6 @@ class ExpenseCalculator {
         const searchInput = document.getElementById('search-expenses');
         const quickButtons = document.querySelectorAll('.quick-btn');
         const datePaid = document.getElementById('date-paid');
-        const connectSheetBtn = document.getElementById('connect-sheet');
 
         // Set today's date as default
         if (datePaid) datePaid.valueAsDate = new Date();
@@ -209,7 +337,6 @@ class ExpenseCalculator {
         if (clearBtn) clearBtn.addEventListener('click', () => this.clearAllExpenses());
         if (splitTypeSelect) splitTypeSelect.addEventListener('change', (e) => this.handleSplitTypeChange(e));
         if (searchInput) searchInput.addEventListener('input', (e) => this.handleSearch(e));
-        if (connectSheetBtn) connectSheetBtn.addEventListener('click', () => this.connectToSheet());
         
         // Quick add buttons
         quickButtons.forEach(btn => {
@@ -231,59 +358,8 @@ class ExpenseCalculator {
         }
     }
 
-    // Connect to Google Sheet
-    async connectToSheet() {
-        const sheetIdInput = document.getElementById('sheet-id');
-        const sheetId = sheetIdInput.value.trim();
-        
-        if (!sheetId) {
-            alert('Please enter a Google Sheet ID');
-            return;
-        }
-        
-        // Extract sheet ID from URL if full URL was pasted
-        const sheetIdMatch = sheetId.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-        const cleanSheetId = sheetIdMatch ? sheetIdMatch[1] : sheetId;
-        
-        try {
-            // Test if sheet is accessible
-            const testUrl = `https://docs.google.com/spreadsheets/d/${cleanSheetId}/export?format=csv&gid=0`;
-            const response = await fetch(testUrl);
-            
-            if (!response.ok) {
-                throw new Error('Sheet not accessible');
-            }
-            
-            // Save sheet ID and load data
-            this.sheetId = cleanSheetId;
-            localStorage.setItem('sheetId', cleanSheetId);
-            
-            await this.loadFromGoogleSheets();
-            this.hideSetupCard();
-            this.updateDisplay();
-            
-            this.showNotification('Successfully connected to Google Sheet!');
-            
-        } catch (error) {
-            alert('Could not connect to Google Sheet. Please make sure:\n1. The sheet is publicly viewable\n2. The ID is correct\n3. You have internet connection');
-        }
-    }
-
-    // Sync data (reload from Google Sheets)
-    async syncData() {
-        if (this.sheetId && this.isOnline) {
-            try {
-                await this.loadFromGoogleSheets();
-                this.updateDisplay();
-                this.showNotification('Data synced!');
-            } catch (error) {
-                console.log('Sync failed:', error);
-            }
-        }
-    }
-
     // Handle adding new expense
-    handleAddExpense(e) {
+    async handleAddExpense(e) {
         e.preventDefault();
         
         const description = document.getElementById('description').value.trim();
@@ -348,43 +424,29 @@ class ExpenseCalculator {
             timestamp: new Date().toISOString()
         };
 
-        this.expenses.unshift(expense); // Add to beginning of array
+        // Add to local array
+        this.expenses.unshift(expense);
         this.saveToLocalStorage();
-        this.updateDisplay();
         
-        // Show instructions to update Google Sheet
-        if (this.sheetId) {
-            this.showAddToSheetInstructions(expense);
+        // Try to save to Google Sheets
+        if (this.webAppUrl && this.isOnline) {
+            const saved = await this.saveToGoogleSheets(expense);
+            if (saved) {
+                this.showNotification('Expense added and synced to Google Sheets!');
+            } else {
+                this.showNotification('Expense added locally. Will sync when connection is restored.');
+            }
+        } else {
+            this.showNotification('Expense added locally. Connect to Google Sheets to sync.');
         }
+        
+        this.updateDisplay();
         
         // Reset form
         e.target.reset();
         document.getElementById('date-paid').valueAsDate = new Date();
         document.getElementById('split-type').value = 'equal';
         this.handleSplitTypeChange({ target: { value: 'equal' } });
-        
-        // Show success feedback
-        this.showNotification('Expense added! Remember to update the Google Sheet.');
-    }
-
-    // Show instructions to add expense to Google Sheet
-    showAddToSheetInstructions(expense) {
-        const instructions = `
-To sync with Thejas, add this row to your Google Sheet:
-
-${expense.id},"${expense.description}",${expense.amount},"${expense.paidBy}","${expense.date}","${expense.splitType}",${expense.sharathPercent},${expense.thejasPercent},"${expense.category}","${expense.timestamp}"
-
-Sheet URL: https://docs.google.com/spreadsheets/d/${this.sheetId}/edit
-        `;
-        
-        // Copy to clipboard if possible
-        if (navigator.clipboard) {
-            const csvRow = `${expense.id},"${expense.description}",${expense.amount},"${expense.paidBy}","${expense.date}","${expense.splitType}",${expense.sharathPercent},${expense.thejasPercent},"${expense.category}","${expense.timestamp}"`;
-            navigator.clipboard.writeText(csvRow);
-            this.showNotification('Row data copied to clipboard! Paste it in your Google Sheet.');
-        } else {
-            alert(instructions);
-        }
     }
 
     // Calculate balances
@@ -567,7 +629,7 @@ Sheet URL: https://docs.google.com/spreadsheets/d/${this.sheetId}/edit
 
         this.saveToLocalStorage();
         this.updateDisplay();
-        this.showNotification('Expense updated! Remember to update the Google Sheet.');
+        this.showNotification('Expense updated locally. Refresh to sync with Google Sheets.');
     }
 
     // Delete expense
@@ -577,7 +639,7 @@ Sheet URL: https://docs.google.com/spreadsheets/d/${this.sheetId}/edit
         this.expenses = this.expenses.filter(expense => expense.id !== id);
         this.saveToLocalStorage();
         this.updateDisplay();
-        this.showNotification('Expense deleted! Remember to update the Google Sheet.');
+        this.showNotification('Expense deleted locally. Refresh to sync with Google Sheets.');
     }
 
     // Export data
@@ -736,7 +798,7 @@ Sheet URL: https://docs.google.com/spreadsheets/d/${this.sheetId}/edit
 
         document.body.appendChild(notification);
 
-        // Remove after 5 seconds (longer for instructions)
+        // Remove after 4 seconds
         setTimeout(() => {
             notification.style.animation = 'slideOut 0.3s ease-out';
             setTimeout(() => {
@@ -744,7 +806,7 @@ Sheet URL: https://docs.google.com/spreadsheets/d/${this.sheetId}/edit
                     document.body.removeChild(notification);
                 }
             }, 300);
-        }, 5000);
+        }, 4000);
     }
 }
 
