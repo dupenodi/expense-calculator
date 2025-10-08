@@ -21,6 +21,14 @@ class ExpenseCalculator {
             }
         }
         
+        // Show sync button if connected to Google Sheets
+        if (this.webAppUrl) {
+            const syncBtn = document.getElementById('sync-btn');
+            if (syncBtn) {
+                syncBtn.style.display = 'inline-block';
+            }
+        }
+        
         // Set up online/offline detection
         window.addEventListener('online', () => {
             this.isOnline = true;
@@ -62,18 +70,39 @@ class ExpenseCalculator {
         if (!this.webAppUrl) return;
         
         try {
-            const response = await fetch(`${this.webAppUrl}?action=get`);
-            const data = await response.json();
+            // Add cache busting and proper headers
+            const url = `${this.webAppUrl}?action=get&t=${Date.now()}`;
+            const response = await fetch(url, {
+                method: 'GET',
+                mode: 'cors',
+                cache: 'no-cache',
+                headers: {
+                    'Accept': 'application/json',
+                }
+            });
             
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
             console.log('Data from Google Sheets:', data);
             
             if (data.success) {
                 this.expenses = data.expenses || [];
                 console.log('Loaded expenses:', this.expenses);
                 this.saveToLocalStorage(); // Keep local backup
+            } else {
+                throw new Error(data.error || 'Failed to load data');
             }
         } catch (error) {
             console.log('Error loading from Google Sheets:', error);
+            
+            // Show user-friendly error message
+            if (error.message.includes('CORS') || error.message.includes('Failed to fetch')) {
+                this.showNotification('⚠️ Connection issue with Google Sheets. Using local data. Try refreshing in a moment.');
+            }
+            
             this.loadFromLocalStorage();
         }
     }
@@ -346,14 +375,23 @@ function doGet(e) {
                     4. Replace the default code with the code above<br>
                     5. Click "Deploy" → "New deployment"<br>
                     6. Choose "Web app" type<br>
-                    7. Set "Execute as" to "Me" and "Who has access" to "Anyone"<br>
-                    8. Click "Deploy" and copy the web app URL<br><br>
+                    7. Set "Execute as" to "Me"<br>
+                    8. Set "Who has access" to "Anyone" (CRITICAL for CORS)<br>
+                    9. Click "Deploy" and copy the web app URL<br><br>
+                    
+                    <strong>⚠️ CORS Fix - If you get CORS errors:</strong><br>
+                    1. Go back to your Google Apps Script<br>
+                    2. Click "Deploy" → "Manage deployments"<br>
+                    3. Click the edit icon (pencil)<br>
+                    4. Change "Version" to "New version"<br>
+                    5. Ensure "Who has access" is "Anyone"<br>
+                    6. Click "Deploy" and use the NEW URL<br><br>
                     
                     <strong>Method 2 (Alternative):</strong><br>
                     1. Go to <a href="https://script.google.com/create" target="_blank">script.google.com/create</a><br>
                     2. Replace the default code with the code above<br>
                     3. The script will auto-create a spreadsheet when first used<br>
-                    4. Deploy as web app (steps 5-8 above)
+                    4. Deploy as web app (steps 5-9 above)
                 </div>
             </div>
         `;
@@ -416,6 +454,12 @@ function doGet(e) {
                     }
                 }
                 
+                // Show sync button
+                const syncBtn = document.getElementById('sync-btn');
+                if (syncBtn) {
+                    syncBtn.style.display = 'inline-block';
+                }
+                
                 // Load existing data
                 await this.loadFromGoogleSheets();
                 this.hideSetupCard();
@@ -474,12 +518,32 @@ function doGet(e) {
             }
         }
     }
+    
+    // Manual sync button
+    async manualSync() {
+        if (!this.webAppUrl) {
+            this.showNotification('⚠️ Not connected to Google Sheets');
+            return;
+        }
+        
+        this.showNotification('🔄 Syncing with Google Sheets...');
+        
+        try {
+            await this.loadFromGoogleSheets();
+            this.updateDisplay();
+            this.showNotification('✅ Data synced successfully!');
+        } catch (error) {
+            console.log('Manual sync failed:', error);
+            this.showNotification('❌ Sync failed. Check console for details.');
+        }
+    }
 
     // Initialize event listeners
     initializeEventListeners() {
         const form = document.getElementById('expense-form');
         const exportBtn = document.getElementById('export-btn');
         const clearBtn = document.getElementById('clear-btn');
+        const syncBtn = document.getElementById('sync-btn');
         const showSheetBtn = document.getElementById('show-sheet-btn');
         const splitTypeSelect = document.getElementById('split-type');
         const searchInput = document.getElementById('search-expenses');
@@ -493,6 +557,7 @@ function doGet(e) {
         if (form) form.addEventListener('submit', (e) => this.handleAddExpense(e));
         if (exportBtn) exportBtn.addEventListener('click', () => this.exportData());
         if (clearBtn) clearBtn.addEventListener('click', () => this.clearAllExpenses());
+        if (syncBtn) syncBtn.addEventListener('click', () => this.manualSync());
         if (showSheetBtn) showSheetBtn.addEventListener('click', () => this.showGoogleSheet());
         if (splitTypeSelect) splitTypeSelect.addEventListener('change', (e) => this.handleSplitTypeChange(e));
         if (searchInput) searchInput.addEventListener('input', (e) => this.handleSearch(e));
